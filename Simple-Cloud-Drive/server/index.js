@@ -23,8 +23,12 @@ const MAX_EDIT_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 // Ensure storage root exists
 fs.mkdirSync(STORAGE_ROOT, { recursive: true });
 
-// Middlewares
-app.use(helmet());
+// Middlewares - Configure helmet for HTTP development
+app.use(helmet({
+  crossOriginOpenerPolicy: false, // 禁用COOP以支持HTTP
+  crossOriginEmbedderPolicy: false, // 禁用COEP
+  contentSecurityPolicy: false, // 禁用CSP，避免资源加载问题
+}));
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
