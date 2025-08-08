@@ -23,11 +23,23 @@ const MAX_EDIT_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 // Ensure storage root exists
 fs.mkdirSync(STORAGE_ROOT, { recursive: true });
 
-// Middlewares - Configure helmet for HTTP development
+// Middlewares - Dynamic helmet config based on environment
+const isHttps = process.env.NODE_ENV === 'production' || process.env.HTTPS === 'true';
 app.use(helmet({
-  crossOriginOpenerPolicy: false, // 禁用COOP以支持HTTP
-  crossOriginEmbedderPolicy: false, // 禁用COEP
-  contentSecurityPolicy: false, // 禁用CSP，避免资源加载问题
+  crossOriginOpenerPolicy: isHttps ? { policy: 'same-origin' } : false,
+  crossOriginEmbedderPolicy: isHttps ? { policy: 'require-corp' } : false,
+  contentSecurityPolicy: isHttps ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+    }
+  } : false,
+  // 其他安全头保持启用
+  xssFilter: true,
+  frameguard: { action: 'deny' },
+  noSniff: true,
 }));
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
