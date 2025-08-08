@@ -1,0 +1,18 @@
+version: "3.8"
+services:
+  drive:
+    build: .
+    container_name: simple-cloud-drive
+    restart: unless-stopped
+    environment:
+      - PORT=8089
+      - JWT_SECRET=${JWT_SECRET}
+      - STORAGE_ROOT=/storage
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./storage:/storage
+
+

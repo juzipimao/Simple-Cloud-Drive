@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Simple Cloud Drive</title>
+    <link rel="stylesheet" href="/style.css?v=20250809-1" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">Simple Cloud Drive</div>
+        <div class="top-actions">
+          <nav class="breadcrumbs" id="breadcrumbs"></nav>
+        </div>
+        <div class="auth">
+          <span class="badge" id="role">guest</span>
+          <button id="loginBtn" class="btn">登录</button>
+          <button id="logoutBtn" class="btn" style="display:none;">退出</button>
+        </div>
+      </header>
+      <main class="container">
+        <section class="actionbar">
+          <div class="left">
+            <button id="upBtn" class="btn secondary">上一级</button>
+            <span id="currentPath" class="muted"></span>
+          </div>
+          <div class="right admin-only">
+            <input id="folderName" class="input" placeholder="新建文件夹名称" />
+            <button id="mkdirBtn" class="btn">新建文件夹</button>
+
+            <!-- Custom file input -->
+            <input id="uploadInput" class="input file-hidden" type="file" multiple />
+            <label for="uploadInput" class="btn secondary" id="chooseBtn">选择文件</label>
+            <span id="chosenText" class="muted">未选择任何文件</span>
+            <button id="uploadBtn" class="btn">上传</button>
+          </div>
+        </section>
+
+        <section class="content">
+          <div id="dropzone" class="dropzone admin-only" style="display:none;">
+            将文件拖拽到此处上传
+          </div>
+          <table class="file-list" id="fileTable">
+            <thead>
+              <tr>
+                <th style="width:40px;"></th>
+                <th>名称</th>
+                <th style="width:140px;">大小</th>
+                <th style="width:220px;">修改时间</th>
+                <th style="width:260px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="fileBody"></tbody>
+          </table>
+        </section>
+
+        <section class="editor" id="editorSection" style="display:none;">
+          <div class="editor-header">
+            <span id="editorFilename"></span>
+            <div class="spacer"></div>
+            <button id="saveBtn" class="btn">保存</button>
+            <button id="closeEditorBtn" class="btn secondary">关闭</button>
+          </div>
+          <textarea id="editorArea" spellcheck="false"></textarea>
+          <div class="preview" id="preview"></div>
+        </section>
+      </main>
+
+      <div id="toast" class="toast" style="display:none;"></div>
+    </div>
+
+    <!-- 登录弹窗 -->
+    <div class="modal" id="loginModal" style="display:none;" autocomplete="off">
+      <div class="dialog">
+        <div class="dialog-header">
+          <span>管理员登录</span>
+          <button class="icon-btn" id="loginClose">✕</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-row">
+            <label for="loginUser">用户名</label>
+            <input type="text" id="loginUser" class="input" name="__user" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="loginPass">密码</label>
+            <input type="password" id="loginPass" class="input" name="__pass" autocomplete="off" />
+          </div>
+          <div class="dialog-actions">
+            <button class="btn secondary" id="loginCancel">取消</button>
+            <button class="btn" id="loginSubmit">登录</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/marked.min.js"></script>
+    <script src="/app.js?v=20250809-1"></script>
+  </body>
+</html>
+
+

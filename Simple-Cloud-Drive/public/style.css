@@ -1,0 +1,75 @@
+:root {
+  --bg: #0f172a;
+  --panel: #111827;
+  --muted: #94a3b8;
+  --text: #e5e7eb;
+  --primary: #3b82f6;
+  --danger: #ef4444;
+  --ok: #10b981;
+  --border: #1f2937;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+.brand { font-weight: 700; letter-spacing: .2px; }
+.auth .btn { margin-left: 8px; }
+
+.container { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+.actionbar { display: flex; align-items: center; justify-content: space-between; background: var(--panel); padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.actionbar .left { display: flex; align-items: center; gap: 10px; }
+.actionbar .right { display: flex; align-items: center; gap: 8px; }
+
+.content { background: var(--panel); padding: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+.editor { background: var(--panel); padding: 12px; border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: auto 240px 1fr; gap: 10px; }
+
+.muted { color: var(--muted); font-size: 12px; }
+
+.btn { background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: transform .02s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn.secondary { background: #374151; }
+.btn.danger { background: var(--danger); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.input, input[type="file"], textarea { background: #0b1220; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.badge { background: #374151; color: #e5e7eb; padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+
+.file-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+.file-list { width: 100%; border-collapse: collapse; }
+.file-list th, .file-list td { border-bottom: 1px solid var(--border); padding: 10px; }
+.file-list tbody tr:hover { background: #0b1220; }
+
+.editor-header { display: flex; align-items: center; gap: 10px; }
+.editor-header .spacer { flex: 1; }
+#editorArea { width: 100%; height: 240px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+#preview { padding: 10px; background: #0b1220; border: 1px solid var(--border); border-radius: 6px; overflow: auto; }
+
+.tag { font-size: 12px; color: var(--muted); }
+.op-btn { margin-right: 6px; margin-bottom: 4px; }
+
+a.dl { color: var(--ok); text-decoration: none; }
+
+.breadcrumbs { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.breadcrumbs a { color: var(--text); text-decoration: none; }
+.breadcrumbs .sep { color: var(--muted); }
+
+.dropzone { border: 2px dashed #334155; padding: 16px; text-align: center; color: var(--muted); border-radius: 8px; margin-bottom: 12px; }
+.dropzone.dragover { background: rgba(59,130,246,.1); border-color: var(--primary); color: var(--text); }
+
+.toast { position: fixed; bottom: 20px; right: 20px; background: #111827; color: var(--text); border: 1px solid var(--border); padding: 10px 12px; border-radius: 8px; box-shadow: 0 5px 20px rgba(0,0,0,.35); max-width: 320px; }
+
+/* Modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: grid; place-items: center; }
+.dialog { background: #0b1220; border: 1px solid var(--border); border-radius: 12px; width: 360px; max-width: 92vw; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+.dialog-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.dialog-body { padding: 14px; display: grid; gap: 12px; }
+.form-row { display: grid; gap: 6px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.icon-btn { background: transparent; border: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+
+@media (max-width: 900px) {
+  .actionbar { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
+
+
