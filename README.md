@@ -69,29 +69,8 @@ server {
 }
 ```
 
-### 一键部署（HTTPS，推荐）
-- 脚本位置：`scripts/oneclick_https.sh`
-- 功能：安装 Docker、Nginx、Certbot，启动服务（端口 8089），自动签发并启用 HTTPS
-- 使用（root 或 sudo）：
-```bash
-cd /opt/simple-cloud-drive # 你的项目目录
-chmod +x scripts/oneclick_https.sh
-scripts/oneclick_https.sh -d your.domain.com -m you@mail.com -p 'StrongPass123!'
-```
-- 可选参数：
-  - `-d` 域名，`-m` 邮箱，`-p` 管理员密码，`-u` 管理员用户名，`-j` 自定义 JWT 密钥，`-a` 自定义 APP_DIR，`-P` 端口（默认 8089）
-- 完成后访问：`https://your.domain.com`
-
-### 一键部署（无域名 HTTP 版）
-- 脚本位置：`scripts/oneclick_nodomain_http.sh`
-- 功能：安装 Docker 与 compose，直接以 HTTP 在 8089 端口启动，不配置 Nginx/证书
-- 使用：
-```bash
-cd /opt/simple-cloud-drive # 你的项目目录
-chmod +x scripts/oneclick_nodomain_http.sh
-scripts/oneclick_nodomain_http.sh
-```
-- 完成后访问：`http://<你的服务器IP>:8089`
+### 一键部署
+当前仓库不包含一键脚本。请参考上面的 “快速开始（Docker 推荐）/本地部署（Debian）/反向代理（Nginx 示例）” 步骤进行部署。
 
 ### 环境变量（.env）
 - `PORT` 服务端口（默认 8089）
