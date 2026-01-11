@@ -9,14 +9,26 @@ import path from 'path';
 import fs from 'fs';
 import { promises as fsp } from 'fs';
 import mime from 'mime-types';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const PUBLIC_ROOT = path.join(PROJECT_ROOT, 'public');
+
+function resolveStorageRoot(input) {
+  if (!input) return path.join(PROJECT_ROOT, 'storage');
+  if (path.isAbsolute(input)) return input;
+  return path.join(PROJECT_ROOT, input);
+}
 
 const app = express();
 const BASE_PATH = '/start-index';
 const PORT = Number(process.env.PORT || 8089);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
-const STORAGE_ROOT = path.resolve(process.env.STORAGE_ROOT || path.resolve(process.cwd(), 'storage'));
+const STORAGE_ROOT = path.resolve(resolveStorageRoot(process.env.STORAGE_ROOT));
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const MAX_EDIT_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
@@ -330,7 +342,7 @@ app.use(`${BASE_PATH}/api`, api);
 app.use('/api', api);
 
 // Static frontend (no cache)
-app.use(BASE_PATH, express.static(path.join(process.cwd(), 'public'), {
+app.use(BASE_PATH, express.static(PUBLIC_ROOT, {
   etag: false,
   lastModified: false,
   cacheControl: false,
