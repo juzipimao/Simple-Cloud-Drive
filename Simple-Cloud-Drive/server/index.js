@@ -13,6 +13,7 @@ import mime from 'mime-types';
 dotenv.config();
 
 const app = express();
+const BASE_PATH = '/start-index';
 const PORT = Number(process.env.PORT || 8089);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const STORAGE_ROOT = path.resolve(process.env.STORAGE_ROOT || path.resolve(process.cwd(), 'storage'));
@@ -50,14 +51,6 @@ app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
-
-// Static frontend (no cache)
-app.use('/', express.static(path.join(process.cwd(), 'public'), {
-  etag: false,
-  lastModified: false,
-  cacheControl: false,
-  maxAge: 0,
-}));
 
 // Multer storage (store directly in destination, but we will compute safe dest at request-time)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB per file
@@ -137,7 +130,9 @@ async function listDirectory(dirPath) {
 }
 
 // Routes
-app.post('/api/login', async (req, res) => {
+const api = express.Router();
+
+api.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     const token = signToken({ role: 'admin', username });
@@ -152,17 +147,17 @@ app.post('/api/login', async (req, res) => {
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
-app.post('/api/logout', (req, res) => {
+api.post('/logout', (req, res) => {
   res.clearCookie('token');
   res.json({ ok: true });
 });
 
-app.get('/api/whoami', (req, res) => {
+api.get('/whoami', (req, res) => {
   const role = getRoleFromRequest(req);
   res.json({ role });
 });
 
-app.get('/api/list', async (req, res) => {
+api.get('/list', async (req, res) => {
   try {
     const dir = resolveSafePath(req.query.path || '/');
     const st = await statSafe(dir);
@@ -175,7 +170,7 @@ app.get('/api/list', async (req, res) => {
   }
 });
 
-app.get('/api/download', async (req, res) => {
+api.get('/download', async (req, res) => {
   try {
     const file = resolveSafePath(req.query.path || '');
     const st = await statSafe(file);
@@ -191,7 +186,7 @@ app.get('/api/download', async (req, res) => {
   }
 });
 
-app.get('/api/read', async (req, res) => {
+api.get('/read', async (req, res) => {
   try {
     const filePath = resolveSafePath(req.query.path || '');
     const st = await statSafe(filePath);
@@ -206,7 +201,7 @@ app.get('/api/read', async (req, res) => {
   }
 });
 
-app.post('/api/write', requireAdmin, async (req, res) => {
+api.post('/write', requireAdmin, async (req, res) => {
   try {
     const { path: p, content } = req.body || {};
     if (typeof p !== 'string') return res.status(400).json({ error: 'Invalid path' });
@@ -221,7 +216,7 @@ app.post('/api/write', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/mkdir', requireAdmin, async (req, res) => {
+api.post('/mkdir', requireAdmin, async (req, res) => {
   try {
     const { path: p, name } = req.body || {};
     const base = resolveSafePath(p || '/');
@@ -234,7 +229,7 @@ app.post('/api/mkdir', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/rename', requireAdmin, async (req, res) => {
+api.post('/rename', requireAdmin, async (req, res) => {
   try {
     const { path: p, newName } = req.body || {};
     const src = resolveSafePath(p || '');
@@ -243,6 +238,42 @@ app.post('/api/rename', requireAdmin, async (req, res) => {
     const dst = resolveSafePath(path.join(path.dirname(p || ''), newName || ''));
     await fsp.rename(src, dst);
     res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Bad request' });
+  }
+});
+
+api.post('/move', requireAdmin, async (req, res) => {
+  try {
+    const { path: p, to } = req.body || {};
+    if (typeof p !== 'string' || typeof to !== 'string') return res.status(400).json({ error: 'Invalid path' });
+
+    const src = resolveSafePath(p);
+    const srcSt = await statSafe(src);
+    if (!srcSt) return res.status(404).json({ error: 'Not found' });
+
+    const baseName = path.basename(p);
+    if (!baseName) return res.status(400).json({ error: 'Invalid path' });
+
+    const targetDir = resolveSafePath(to);
+    const targetDirSt = await statSafe(targetDir);
+    if (!targetDirSt || !targetDirSt.isDirectory()) return res.status(400).json({ error: 'Target directory not found' });
+
+    if (srcSt.isDirectory()) {
+      const srcPrefix = src.endsWith(path.sep) ? src : src + path.sep;
+      if (targetDir === src || targetDir.startsWith(srcPrefix)) {
+        return res.status(400).json({ error: 'Cannot move directory into itself' });
+      }
+    }
+
+    const dst = resolveSafePath(path.join(to, baseName));
+    if (!dst.startsWith(targetDir)) return res.status(400).json({ error: 'Invalid target path' });
+
+    const dstSt = await statSafe(dst);
+    if (dstSt) return res.status(409).json({ error: 'Target already exists' });
+
+    await fsp.rename(src, dst);
+    res.json({ ok: true, from: p, to: path.join(to, baseName) });
   } catch (e) {
     res.status(400).json({ error: e.message || 'Bad request' });
   }
@@ -262,7 +293,7 @@ async function removeRecursively(targetPath) {
   }
 }
 
-app.delete('/api/delete', requireAdmin, async (req, res) => {
+api.delete('/delete', requireAdmin, async (req, res) => {
   try {
     const p = req.query.path || (req.body && req.body.path) || '';
     const target = resolveSafePath(p);
@@ -275,7 +306,7 @@ app.delete('/api/delete', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/upload', requireAdmin, upload.array('files', 20), async (req, res) => {
+api.post('/upload', requireAdmin, upload.array('files', 20), async (req, res) => {
   try {
     const p = req.query.path || '';
     const dir = resolveSafePath(p);
@@ -294,15 +325,19 @@ app.post('/api/upload', requireAdmin, upload.array('files', 20), async (req, res
   }
 });
 
-// Fallback route for SPA navigation to index.html
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/')) return next();
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
-});
+app.use(`${BASE_PATH}/api`, api);
+// Backward-compatible API path
+app.use('/api', api);
+
+// Static frontend (no cache)
+app.use(BASE_PATH, express.static(path.join(process.cwd(), 'public'), {
+  etag: false,
+  lastModified: false,
+  cacheControl: false,
+  maxAge: 0,
+}));
 
 app.listen(PORT, () => {
-  console.log(`Simple Cloud Drive running on http://0.0.0.0:${PORT}`);
+  console.log(`Simple Cloud Drive running on http://0.0.0.0:${PORT}${BASE_PATH}`);
   console.log(`Storage root: ${STORAGE_ROOT}`);
 });
-
-

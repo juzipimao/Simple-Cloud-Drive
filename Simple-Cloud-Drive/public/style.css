@@ -39,6 +39,8 @@ body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI
 .file-list { width: 100%; border-collapse: collapse; }
 .file-list th, .file-list td { border-bottom: 1px solid var(--border); padding: 10px; }
 .file-list tbody tr:hover { background: #0b1220; }
+.file-list a:not(.dl) { color: var(--text); text-decoration: none; }
+.file-list a:not(.dl):hover { text-decoration: underline; }
 
 .editor-header { display: flex; align-items: center; gap: 10px; }
 .editor-header .spacer { flex: 1; }
@@ -71,5 +73,4 @@ a.dl { color: var(--ok); text-decoration: none; }
 @media (max-width: 900px) {
   .actionbar { flex-direction: column; gap: 10px; align-items: flex-start; }
 }
-
 

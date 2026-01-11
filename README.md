@@ -37,7 +37,7 @@ docker compose up -d --build
 ```
 
 3) 访问
-- 浏览器打开: http://<你的服务器IP或域名>:8089
+- 浏览器打开: http://<你的服务器IP或域名>:8089/start-index
 - 管理员登录: 使用 `.env` 中的 `ADMIN_USERNAME` 与 `ADMIN_PASSWORD`
 
 4) 数据卷
@@ -64,7 +64,7 @@ npm run start
 ```
 
 3) 访问
-- 浏览器打开: http://<你的服务器IP或域名>:8089
+- 浏览器打开: http://<你的服务器IP或域名>:8089/start-index
 
 ### 反向代理（Nginx 示例）
 ```
@@ -110,5 +110,4 @@ server {
 npm run dev   # 开发模式（自动重启）
 npm run start # 生产模式
 ```
-
 

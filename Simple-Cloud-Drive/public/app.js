@@ -5,6 +5,8 @@ let currentPath = '/';
 let role = 'guest';
 let currentEditingPath = '';
 
+const API_BASE = '/start-index/api';
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     credentials: 'include',
@@ -36,8 +38,17 @@ function formatSize(size) {
   return `${s.toFixed(s < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
+function normalizeDirPath(input) {
+  let p = (input || '').trim();
+  if (!p) return '';
+  if (!p.startsWith('/')) p = '/' + p;
+  p = p.replace(/\/+/g, '/');
+  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  return p;
+}
+
 async function refreshRole() {
-  const data = await api('/api/whoami');
+  const data = await api(`${API_BASE}/whoami`);
   role = data.role;
   $('#role').textContent = role;
   const admin = role === 'admin';
@@ -72,7 +83,7 @@ function renderBreadcrumbs() {
 }
 
 async function list(pathname = currentPath) {
-  const data = await api(`/api/list?path=${encodeURIComponent(pathname)}`);
+  const data = await api(`${API_BASE}/list?path=${encodeURIComponent(pathname)}`);
   currentPath = data.path || '/';
   $('#currentPath').textContent = currentPath;
   renderBreadcrumbs();
@@ -106,7 +117,7 @@ async function list(pathname = currentPath) {
     dl.textContent = '下载';
     dl.className = 'dl op-btn';
     if (item.type === 'file') {
-      dl.href = `/api/download?path=${encodeURIComponent(joinPath(currentPath, item.name))}`;
+      dl.href = `${API_BASE}/download?path=${encodeURIComponent(joinPath(currentPath, item.name))}`;
     } else {
       dl.href = 'javascript:void(0)';
     }
@@ -119,18 +130,38 @@ async function list(pathname = currentPath) {
       renameBtn.onclick = async () => {
         const newName = prompt('输入新名称：', item.name);
         if (!newName || newName === item.name) return;
-        await api('/api/rename', { method: 'POST', body: JSON.stringify({ path: joinPath(currentPath, item.name), newName }) });
+        await api(`${API_BASE}/rename`, { method: 'POST', body: JSON.stringify({ path: joinPath(currentPath, item.name), newName }) });
         toast('已重命名');
         await list();
       };
       opsTd.appendChild(renameBtn);
+
+      const moveBtn = document.createElement('button');
+      moveBtn.textContent = '移动';
+      moveBtn.className = 'btn op-btn';
+      moveBtn.onclick = async () => {
+        try {
+          const toInput = prompt('移动到哪个文件夹？输入目标路径（例如 /docs ）：', currentPath || '/');
+          if (toInput == null) return;
+          const targetDir = normalizeDirPath(toInput);
+          if (!targetDir) return;
+          const fromPath = joinPath(currentPath, item.name);
+          if (targetDir === currentPath) return toast('目标文件夹与当前相同');
+          await api(`${API_BASE}/move`, { method: 'POST', body: JSON.stringify({ path: fromPath, to: targetDir }) });
+          toast('已移动');
+          await list();
+        } catch (e) {
+          toast(e.message || '移动失败');
+        }
+      };
+      opsTd.appendChild(moveBtn);
 
       const delBtn = document.createElement('button');
       delBtn.textContent = '删除';
       delBtn.className = 'btn danger op-btn';
       delBtn.onclick = async () => {
         if (!confirm('确认删除？')) return;
-        await api(`/api/delete?path=${encodeURIComponent(joinPath(currentPath, item.name))}`, { method: 'DELETE' });
+        await api(`${API_BASE}/delete?path=${encodeURIComponent(joinPath(currentPath, item.name))}`, { method: 'DELETE' });
         toast('已删除');
         await list();
       };
@@ -154,14 +185,14 @@ function joinPath(base, name) {
 
 async function openFile(targetPath) {
   try {
-    const data = await api(`/api/read?path=${encodeURIComponent(targetPath)}`);
+    const data = await api(`${API_BASE}/read?path=${encodeURIComponent(targetPath)}`);
     currentEditingPath = targetPath;
     $('#editorSection').style.display = 'grid';
     $('#editorFilename').textContent = targetPath;
     $('#editorArea').value = data.content || '';
     renderPreview();
   } catch (e) {
-    window.location.href = `/api/download?path=${encodeURIComponent(targetPath)}`;
+    window.location.href = `${API_BASE}/download?path=${encodeURIComponent(targetPath)}`;
   }
 }
 
@@ -177,7 +208,7 @@ function renderPreview() {
 
 async function saveEdit() {
   if (!currentEditingPath) return;
-  await api('/api/write', { method: 'POST', body: JSON.stringify({ path: currentEditingPath, content: $('#editorArea').value }) });
+  await api(`${API_BASE}/write`, { method: 'POST', body: JSON.stringify({ path: currentEditingPath, content: $('#editorArea').value }) });
   toast('已保存');
   await list();
 }
@@ -192,14 +223,14 @@ async function doLoginModal() {
   const username = $('#loginUser').value.trim();
   const password = $('#loginPass').value;
   if (!username || !password) return toast('请输入用户名和密码');
-  await api('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+  await api(`${API_BASE}/login`, { method: 'POST', body: JSON.stringify({ username, password }) });
   toast('登录成功');
   closeLoginModal();
   await refreshRole();
 }
 
 async function doLogout() {
-  await api('/api/logout', { method: 'POST' });
+  await api(`${API_BASE}/logout`, { method: 'POST' });
   toast('已退出');
   await refreshRole();
 }
@@ -207,7 +238,7 @@ async function doLogout() {
 async function mkdir() {
   const name = $('#folderName').value.trim();
   if (!name) return toast('请输入名称');
-  await api('/api/mkdir', { method: 'POST', body: JSON.stringify({ path: currentPath, name }) });
+  await api(`${API_BASE}/mkdir`, { method: 'POST', body: JSON.stringify({ path: currentPath, name }) });
   $('#folderName').value = '';
   toast('已创建');
   await list();
@@ -216,7 +247,7 @@ async function mkdir() {
 async function upload(files) {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
-  const res = await fetch(`/api/upload?path=${encodeURIComponent(currentPath)}`, { method: 'POST', body: fd, credentials: 'include' });
+  const res = await fetch(`${API_BASE}/upload?path=${encodeURIComponent(currentPath)}`, { method: 'POST', body: fd, credentials: 'include' });
   if (!res.ok) { toast('上传失败'); return; }
   toast('上传成功');
   $('#uploadInput').value = '';
@@ -270,5 +301,3 @@ window.addEventListener('DOMContentLoaded', async () => {
   await refreshRole();
   await list('/');
 });
-
-
