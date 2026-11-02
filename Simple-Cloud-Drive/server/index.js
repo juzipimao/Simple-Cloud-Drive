@@ -1,6 +1,5 @@
 import express from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
@@ -8,15 +7,16 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { promises as fsp } from 'fs';
-import mime from 'mime-types';
 import { fileURLToPath } from 'url';
-
-dotenv.config();
+import { pipeline } from 'node:stream';
+import { DownloadLinks, fileIdentity, openDownloadFile } from './download-links.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const PUBLIC_ROOT = path.join(PROJECT_ROOT, 'public');
+
+dotenv.config({ path: path.join(PROJECT_ROOT, '.env') });
 
 function resolveStorageRoot(input) {
   if (!input) return path.join(PROJECT_ROOT, 'storage');
@@ -32,6 +32,7 @@ const STORAGE_ROOT = path.resolve(resolveStorageRoot(process.env.STORAGE_ROOT));
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const MAX_EDIT_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+const downloadLinks = new DownloadLinks();
 
 // Ensure storage root exists
 fs.mkdirSync(STORAGE_ROOT, { recursive: true });
@@ -54,7 +55,8 @@ app.use(helmet({
   frameguard: { action: 'deny' },
   noSniff: true,
 }));
-app.use(cors({ origin: true, credentials: true }));
+// The UI and API are same-origin. Do not reflect arbitrary origins with
+// credentials: that would expose administrator APIs to hostile sibling sites.
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
@@ -90,18 +92,69 @@ function getRoleFromRequest(req) {
 function requireAdmin(req, res, next) {
   const role = getRoleFromRequest(req);
   if (role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden: admin only' });
+    return res.status(401).json({ error: 'Authentication required' });
   }
   next();
 }
 
 function resolveSafePath(requestedPath) {
-  const normalized = path.normalize('/' + (requestedPath || ''));
-  const target = path.resolve(STORAGE_ROOT + normalized);
-  if (!target.startsWith(STORAGE_ROOT)) {
+  if (typeof requestedPath !== 'string' || requestedPath.length > 4096 ||
+      /[\0\\]/.test(requestedPath) || requestedPath.split('/').includes('..')) {
     throw new Error('Invalid path');
   }
+  const root = fs.realpathSync(STORAGE_ROOT);
+  let target = root;
+  for (const part of requestedPath.split('/').filter(Boolean)) {
+    target = path.join(target, part);
+    try {
+      if (fs.lstatSync(target).isSymbolicLink()) throw new Error('Symbolic links are not allowed');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
   return target;
+}
+
+function requireSameOrigin(req, res, next) {
+  const origin = req.get('origin');
+  let foreignOrigin = false;
+  if (origin) {
+    try {
+      const parsed = new URL(origin);
+      foreignOrigin = !['http:', 'https:'].includes(parsed.protocol) || parsed.host !== req.get('host');
+    } catch {
+      foreignOrigin = true;
+    }
+  }
+  if (foreignOrigin || req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+  }
+  next();
+}
+
+async function sendDownload(req, res, file) {
+  let stream;
+  try {
+    res.attachment(file.filename);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', file.stat.size.toString());
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    if (req.method === 'HEAD') {
+      await file.handle.close();
+      return res.end();
+    }
+    stream = file.handle.createReadStream();
+    pipeline(stream, res, () => {
+      // pipeline destroys both ends on errors/client disconnects, closing the fd.
+    });
+  } catch (error) {
+    if (stream) stream.destroy();
+    else await file.handle.close();
+    throw error;
+  }
 }
 
 function isTextLikeExtension(filePath) {
@@ -122,7 +175,7 @@ async function statSafe(targetPath) {
 async function listDirectory(dirPath) {
   const entries = await fsp.readdir(dirPath, { withFileTypes: true });
   const items = await Promise.all(
-    entries.map(async (entry) => {
+    entries.filter(entry => entry.isDirectory() || entry.isFile()).map(async (entry) => {
       const full = path.join(dirPath, entry.name);
       const st = await fsp.stat(full);
       return {
@@ -169,6 +222,29 @@ api.get('/whoami', (req, res) => {
   res.json({ role });
 });
 
+// All management operations require login. Public links use a separate,
+// read-only route below and never act as administrator credentials.
+// Both API prefixes below share this guard.
+api.use(requireAdmin);
+
+api.post('/share', requireSameOrigin, async (req, res) => {
+  let file;
+  try {
+    file = await openDownloadFile(STORAGE_ROOT, req.body?.path);
+    const { token, expiresAt } = downloadLinks.create({
+      filePath: file.filePath,
+      identity: fileIdentity(file.stat),
+    });
+    // Never build bearer URLs from the untrusted Host/X-Forwarded-Host header.
+    res.status(201).json({ url: `${BASE_PATH}/share/${token}`, expiresAt });
+  } catch (error) {
+    const status = error.status || (error.code === 'ENOENT' ? 404 : 400);
+    res.status(status).json({ error: status === 429 ? error.message : 'File unavailable or invalid path' });
+  } finally {
+    if (file) await file.handle.close();
+  }
+});
+
 api.get('/list', async (req, res) => {
   try {
     const dir = resolveSafePath(req.query.path || '/');
@@ -184,17 +260,10 @@ api.get('/list', async (req, res) => {
 
 api.get('/download', async (req, res) => {
   try {
-    const file = resolveSafePath(req.query.path || '');
-    const st = await statSafe(file);
-    if (!st) return res.status(404).json({ error: 'Not found' });
-    if (st.isDirectory()) return res.status(400).json({ error: 'Cannot download directory' });
-    const fileName = path.basename(file);
-    res.setHeader('Content-Type', mime.lookup(fileName) || 'application/octet-stream');
-    res.setHeader('Content-Length', st.size);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
-    fs.createReadStream(file).pipe(res);
+    const file = await openDownloadFile(STORAGE_ROOT, req.query.path);
+    await sendDownload(req, res, file);
   } catch (e) {
-    res.status(400).json({ error: e.message || 'Bad request' });
+    if (!res.headersSent) res.status(e.code === 'ENOENT' ? 404 : 400).json({ error: 'File unavailable or invalid path' });
   }
 });
 
@@ -292,8 +361,11 @@ api.post('/move', requireAdmin, async (req, res) => {
 });
 
 async function removeRecursively(targetPath) {
-  const st = await statSafe(targetPath);
-  if (!st) return;
+  let st;
+  try { st = await fsp.lstat(targetPath); } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
   if (st.isDirectory()) {
     const children = await fsp.readdir(targetPath);
     for (const child of children) {
@@ -340,6 +412,54 @@ api.post('/upload', requireAdmin, upload.array('files', 20), async (req, res) =>
 app.use(`${BASE_PATH}/api`, api);
 // Backward-compatible API path
 app.use('/api', api);
+
+// This is the sole public file endpoint. It accepts only an opaque token, not
+// a client-supplied file path, and is registered before the management guard.
+app.get(`${BASE_PATH}/share/:token`, async (req, res) => {
+  const invalid = () => res.status(404).json({ error: 'Download link invalid or expired' });
+  const entry = downloadLinks.get(req.params.token);
+  if (!entry) return invalid();
+  let file;
+  try {
+    file = await openDownloadFile(STORAGE_ROOT, entry.filePath);
+    if (fileIdentity(file.stat) !== entry.identity) {
+      downloadLinks.revoke(req.params.token);
+      return invalid();
+    }
+    // Recheck expiry after asynchronous filesystem work, including HEAD.
+    if (downloadLinks.get(req.params.token) !== entry) return invalid();
+    const download = file;
+    file = null; // sendDownload owns and closes the descriptor from here.
+    await sendDownload(req, res, download);
+  } catch {
+    downloadLinks.revoke(req.params.token);
+    if (!res.headersSent) return invalid();
+  } finally {
+    if (file) await file.handle.close();
+  }
+});
+
+app.get([`${BASE_PATH}/login`, `${BASE_PATH}/login.html`], (req, res) => {
+  if (getRoleFromRequest(req) === 'admin') return res.redirect(`${BASE_PATH}/`);
+  res.sendFile(path.join(PUBLIC_ROOT, 'login.html'));
+});
+
+// The login screen only needs these public assets. Everything else is guarded
+// before static path decoding, including direct and encoded index.html URLs.
+app.get(`${BASE_PATH}/style.css`, (req, res) => {
+  res.sendFile(path.join(PUBLIC_ROOT, 'style.css'));
+});
+app.get(`${BASE_PATH}/login.js`, (req, res) => {
+  res.sendFile(path.join(PUBLIC_ROOT, 'login.js'));
+});
+app.use(BASE_PATH, (req, res, next) => {
+  if (getRoleFromRequest(req) !== 'admin') return res.redirect(`${BASE_PATH}/login`);
+  next();
+});
+
+app.get(`${BASE_PATH}/dompurify.min.js`, (req, res) => {
+  res.sendFile(path.join(PROJECT_ROOT, 'node_modules/dompurify/dist/purify.min.js'));
+});
 
 // Static frontend (no cache)
 app.use(BASE_PATH, express.static(PUBLIC_ROOT, {

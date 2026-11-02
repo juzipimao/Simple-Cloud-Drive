@@ -7,12 +7,26 @@ let currentEditingPath = '';
 
 const API_BASE = '/start-index/api';
 
+function redirectToLogin() {
+  role = 'guest';
+  document.documentElement.hidden = true;
+  location.replace('/start-index/login');
+}
+
+// A history snapshot must not expose files after logout or session expiry.
+window.addEventListener('pagehide', () => { document.documentElement.hidden = true; });
+window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     ...opts,
   });
+  if (res.status === 401 || res.status === 403) {
+    redirectToLogin();
+    throw new Error('请先登录');
+  }
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const data = await res.json(); msg = data.error || msg; } catch {}
@@ -50,14 +64,18 @@ function normalizeDirPath(input) {
 async function refreshRole() {
   const data = await api(`${API_BASE}/whoami`);
   role = data.role;
+  if (role !== 'admin') {
+    redirectToLogin();
+    return false;
+  }
   $('#role').textContent = role;
   const admin = role === 'admin';
-  $('#loginBtn').style.display = admin ? 'none' : 'inline-block';
   $('#logoutBtn').style.display = admin ? 'inline-block' : 'none';
   $('#mkdirBtn').disabled = !admin;
   $('#uploadBtn').disabled = !admin;
   $('#uploadInput').disabled = !admin;
   $$('.admin-only').forEach(el => el.style.display = admin ? '' : 'none');
+  return true;
 }
 
 function renderBreadcrumbs() {
@@ -124,6 +142,36 @@ async function list(pathname = currentPath) {
     opsTd.appendChild(dl);
 
     if (role === 'admin') {
+      if (item.type === 'file') {
+        const shareBtn = document.createElement('button');
+        shareBtn.textContent = '临时链接';
+        shareBtn.title = '生成任何人可用、1 小时有效的下载链接';
+        shareBtn.className = 'btn secondary op-btn';
+        shareBtn.onclick = async () => {
+          shareBtn.disabled = true;
+          try {
+            const data = await api(`${API_BASE}/share`, {
+              method: 'POST',
+              body: JSON.stringify({ path: joinPath(currentPath, item.name) }),
+            });
+            const url = new URL(data.url, location.origin);
+            if (url.origin !== location.origin) throw new Error('无效的下载链接');
+            $('#shareFilename').textContent = item.name;
+            $('#shareUrl').value = url.href;
+            $('#shareExpiry').textContent = `过期时间：${new Date(data.expiresAt).toLocaleString()}`;
+            const dialog = $('#shareDialog');
+            if (!dialog.open) dialog.showModal();
+            $('#shareUrl').focus();
+            $('#shareUrl').select();
+          } catch (error) {
+            toast(error.message || '生成临时链接失败');
+          } finally {
+            shareBtn.disabled = false;
+          }
+        };
+        opsTd.appendChild(shareBtn);
+      }
+
       const renameBtn = document.createElement('button');
       renameBtn.textContent = '重命名';
       renameBtn.className = 'btn op-btn';
@@ -192,6 +240,7 @@ async function openFile(targetPath) {
     $('#editorArea').value = data.content || '';
     renderPreview();
   } catch (e) {
+    if (role !== 'admin') return;
     window.location.href = `${API_BASE}/download?path=${encodeURIComponent(targetPath)}`;
   }
 }
@@ -199,8 +248,13 @@ async function openFile(targetPath) {
 function renderPreview() {
   const text = $('#editorArea').value || '';
   const isMd = /\.(md|markdown)$/i.test(currentEditingPath || '');
-  if (isMd && window.marked) {
-    $('#preview').innerHTML = marked.parse(text);
+  if (isMd && window.marked && window.DOMPurify) {
+    $('#preview').innerHTML = DOMPurify.sanitize(marked.parse(text), {
+      USE_PROFILES: { html: true },
+      SANITIZE_NAMED_PROPS: true,
+      FORBID_TAGS: ['style', 'form'],
+      FORBID_ATTR: ['style'],
+    });
   } else {
     $('#preview').textContent = text;
   }
@@ -213,26 +267,13 @@ async function saveEdit() {
   await list();
 }
 
-function openLoginModal() {
-  $('#loginModal').style.display = 'grid';
-  $('#loginUser').focus();
-}
-function closeLoginModal() { $('#loginModal').style.display = 'none'; }
-
-async function doLoginModal() {
-  const username = $('#loginUser').value.trim();
-  const password = $('#loginPass').value;
-  if (!username || !password) return toast('请输入用户名和密码');
-  await api(`${API_BASE}/login`, { method: 'POST', body: JSON.stringify({ username, password }) });
-  toast('登录成功');
-  closeLoginModal();
-  await refreshRole();
-}
-
 async function doLogout() {
-  await api(`${API_BASE}/logout`, { method: 'POST' });
-  toast('已退出');
-  await refreshRole();
+  try {
+    await api(`${API_BASE}/logout`, { method: 'POST' });
+    redirectToLogin();
+  } catch (e) {
+    toast(e.message || '退出失败，请重试');
+  }
 }
 
 async function mkdir() {
@@ -248,6 +289,7 @@ async function upload(files) {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
   const res = await fetch(`${API_BASE}/upload?path=${encodeURIComponent(currentPath)}`, { method: 'POST', body: fd, credentials: 'include' });
+  if (res.status === 401 || res.status === 403) { redirectToLogin(); return; }
   if (!res.ok) { toast('上传失败'); return; }
   toast('上传成功');
   $('#uploadInput').value = '';
@@ -275,11 +317,7 @@ function goUp() {
 
 window.addEventListener('DOMContentLoaded', async () => {
   // Auth
-  $('#loginBtn').onclick = openLoginModal;
   $('#logoutBtn').onclick = doLogout;
-  $('#loginClose').onclick = closeLoginModal;
-  $('#loginCancel').onclick = closeLoginModal;
-  $('#loginSubmit').onclick = doLoginModal;
 
   // FS actions
   $('#mkdirBtn').onclick = mkdir;
@@ -296,8 +334,25 @@ window.addEventListener('DOMContentLoaded', async () => {
   $('#saveBtn').onclick = saveEdit;
   $('#closeEditorBtn').onclick = () => { $('#editorSection').style.display = 'none'; currentEditingPath=''; };
   $('#editorArea').addEventListener('input', renderPreview);
+  $('#closeShareBtn').onclick = () => $('#shareDialog').close();
+  $('#shareDialog').addEventListener('close', () => { $('#shareUrl').value = ''; });
+  $('#copyShareBtn').onclick = async () => {
+    const input = $('#shareUrl');
+    input.focus();
+    input.select();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(input.value);
+      toast('临时下载链接已复制');
+    } catch {
+      // HTTP deployments may not have the Clipboard API. Keep manual copying usable.
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch {}
+      toast(copied ? '临时下载链接已复制' : '请手动复制已选中的链接');
+    }
+  };
 
   setupDropzone();
-  await refreshRole();
+  if (!await refreshRole()) return;
   await list('/');
 });

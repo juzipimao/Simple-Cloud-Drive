@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Cloud Drive 登录</title>
+    <link rel="stylesheet" href="/start-index/style.css" />
+  </head>
+  <body class="login-page">
+    <main class="dialog login-card">
+      <div class="dialog-header"><h1>Simple Cloud Drive</h1></div>
+      <form id="loginForm" class="dialog-body">
+        <p class="muted">请先登录，再浏览、预览或下载文件。</p>
+        <div class="form-row">
+          <label for="loginUser">用户名</label>
+          <input type="text" id="loginUser" class="input" name="username" autocomplete="username" required autofocus />
+        </div>
+        <div class="form-row">
+          <label for="loginPass">密码</label>
+          <input type="password" id="loginPass" class="input" name="password" autocomplete="current-password" required />
+        </div>
+        <div id="loginError" class="login-error" role="alert" aria-live="polite"></div>
+        <button class="btn" id="loginSubmit" type="submit">登录</button>
+      </form>
+    </main>
+    <script src="/start-index/login.js"></script>
+  </body>
+</html>

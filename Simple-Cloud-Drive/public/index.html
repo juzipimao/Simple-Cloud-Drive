@@ -17,9 +17,8 @@
           <nav class="breadcrumbs" id="breadcrumbs"></nav>
         </div>
         <div class="auth">
-          <span class="badge" id="role">guest</span>
-          <button id="loginBtn" class="btn">登录</button>
-          <button id="logoutBtn" class="btn" style="display:none;">退出</button>
+          <span class="badge" id="role">admin</span>
+          <button id="logoutBtn" class="btn">退出</button>
         </div>
       </header>
       <main class="container">
@@ -51,7 +50,7 @@
                 <th>名称</th>
                 <th style="width:140px;">大小</th>
                 <th style="width:220px;">修改时间</th>
-                <th style="width:260px;">操作</th>
+                <th style="width:350px;">操作</th>
               </tr>
             </thead>
             <tbody id="fileBody"></tbody>
@@ -73,31 +72,27 @@
       <div id="toast" class="toast" style="display:none;"></div>
     </div>
 
-    <!-- 登录弹窗 -->
-    <div class="modal" id="loginModal" style="display:none;" autocomplete="off">
-      <div class="dialog">
-        <div class="dialog-header">
-          <span>管理员登录</span>
-          <button class="icon-btn" id="loginClose">✕</button>
-        </div>
-        <div class="dialog-body">
-          <div class="form-row">
-            <label for="loginUser">用户名</label>
-            <input type="text" id="loginUser" class="input" name="__user" autocomplete="off" />
-          </div>
-          <div class="form-row">
-            <label for="loginPass">密码</label>
-            <input type="password" id="loginPass" class="input" name="__pass" autocomplete="off" />
-          </div>
-          <div class="dialog-actions">
-            <button class="btn secondary" id="loginCancel">取消</button>
-            <button class="btn" id="loginSubmit">登录</button>
-          </div>
+    <dialog id="shareDialog" class="dialog share-dialog" aria-labelledby="shareTitle">
+      <div class="dialog-header">
+        <strong id="shareTitle">临时下载链接</strong>
+        <button id="closeShareBtn" class="icon-btn" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div id="shareFilename" class="share-filename"></div>
+        <p class="muted">知道链接的任何人都可下载，无需登录。链接生成后 1 小时失效，请只发给需要的人。</p>
+        <label class="form-row" for="shareUrl">下载链接
+          <input id="shareUrl" class="input" type="text" readonly autocomplete="off" spellcheck="false" />
+        </label>
+        <div id="shareExpiry" class="muted"></div>
+        <div class="muted">文件修改、替换、移动、删除或服务重启后，旧链接也会失效。</div>
+        <div class="dialog-actions">
+          <button id="copyShareBtn" class="btn" type="button">复制链接</button>
         </div>
       </div>
-    </div>
+    </dialog>
 
     <script src="/start-index/marked.min.js"></script>
+    <script src="/start-index/dompurify.min.js"></script>
     <script src="/start-index/app.js?v=20250809-1"></script>
   </body>
 </html>
